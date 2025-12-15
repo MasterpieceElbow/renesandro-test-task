@@ -258,6 +258,7 @@ def download_media(
     video_files = []
     background_filename = None
 
+    # Download video and audio files concurrently
     with ThreadPoolExecutor(max_workers=4) as executor:
         future_map = {
             executor.submit(_download_file, url, tmpdir): url
@@ -271,23 +272,6 @@ def download_media(
                 background_filename = filename
             else:
                 video_files.append(filename)
-        
-    # video_files = []
-    # for video_url in video_urls:
-    #     filename = os.path.join(tmpdir, video_url.split("/")[-1])
-    #     with requests.get(video_url, stream=True) as r:
-    #         r.raise_for_status()
-    #         with open(filename, "wb") as f:
-    #             for chunk in r.iter_content(1024 * 1024):
-    #                 f.write(chunk)
-    #     video_files.append(filename)
-
-    # background_filename = os.path.join(tmpdir, audio_url.split("/")[-1])
-    # with requests.get(audio_url, stream=True) as r:
-    #     r.raise_for_status()
-    #     with open(background_filename, "wb") as f:
-    #         for chunk in r.iter_content(1024 * 1024):
-    #             f.write(chunk)
     logger.info(
         LogSchema(
             task_name=task_name,
