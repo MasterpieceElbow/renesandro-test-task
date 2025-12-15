@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     elevenlabs_api_key: str = ""
     google_application_credentials: str = ""
     google_drive_root_folder_id: str = ""
+    google_client_email: str = ""
     redis_port: int = 6379
     redis_host: str = ""
 

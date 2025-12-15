@@ -2,7 +2,7 @@ from typing import TypedDict
 from pydantic import BaseModel, Field, model_validator
 
 
-class TestToSpeechDict(TypedDict):
+class TextToSpeechDict(TypedDict):
     text: str
     voice: str
 
@@ -10,8 +10,8 @@ class TextToSpeechSchema(BaseModel):
     text: str
     voice: str
 
-    def to_dict(self) -> TestToSpeechDict:
-        return TestToSpeechDict(
+    def to_dict(self) -> TextToSpeechDict:
+        return TextToSpeechDict(
             text=self.text,
             voice=self.voice,
         )
@@ -30,3 +30,11 @@ class ProcessMediaSchema(BaseModel):
             if len(list_url) == 0:
                 raise ValueError("Video and audio URL blocks must not be empty")
         return self
+
+    def to_dict(self) -> dict:
+        return {
+            "task_name": self.task_name,
+            "video_blocks": self.video_blocks,
+            "audio_blocks": self.audio_blocks,
+            "text_to_speech": [tts.to_dict() for tts in self.text_to_speech],
+        }

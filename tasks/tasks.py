@@ -1,10 +1,11 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+import itertools
 from logging import getLogger
 import os
+import random
 import tempfile
-import time
-import celery
-import requests
+from celery import chord, group
 import requests
 from moviepy import (
     VideoFileClip, 
@@ -14,22 +15,97 @@ from moviepy import (
     CompositeAudioClip
 )
 from moviepy.audio import fx
-from routers.schemas.requests import TestToSpeechDict
+from routers.schemas.requests import TextToSpeechDict
 from services.google_service import GoogleDriveService
 from services.elevenlabs_service import ElevenLabsService
 from services.schemas.schemas import LogSchema
+from main.celery_app import celery_app
 
 google_service = GoogleDriveService()
 elevenlabs_service = ElevenLabsService()
 logger = getLogger(__name__)
 
 
-@celery.shared_task(name="process_video")
+# Process the entire media task
+@celery_app.task()
+def process_media(
+    task_name: str,
+    video_blocks: dict[str, list[str]],
+    audio_blocks: dict[str, list[str]],
+    text_to_speech: list[TextToSpeechDict],
+) -> None:
+    start_time = datetime.now().timestamp()
+    video_combinations = list(itertools.product(
+        *video_blocks.values()
+    ))
+    audio_urls = [audio for block in audio_blocks.values() for audio in block]
+    tasks = []
+
+    # Create a Celery task for each video combination
+    for index, combination in enumerate(video_combinations, start=1):
+        kwargs ={
+            "task_name": task_name,
+            "video_urls": combination,
+            "audio_url": random.choice(audio_urls),
+            "text_to_speech": random.choice(text_to_speech),
+            "index": index,
+        }
+        tasks.append(process_video.s(**kwargs))
+
+    logger.info(
+        LogSchema(
+            task_name=task_name,
+            timestamp=start_time,
+            total_time=None,
+            level="INFO",
+            message="Media processing started",
+            details={
+                "total_videos": len(video_combinations),
+            },
+            error_details=None,
+        ).model_dump(mode="json")
+    )
+
+    # Call a callback task to finalize the media processing after all videos are done
+    return chord(
+        group(tasks),
+        finalize_media_process.s(
+            task_name=task_name,
+            start_time=start_time
+        )
+    ).apply_async()
+
+
+# Log the media processing results after all videos are processed
+@celery_app.task
+def finalize_media_process(results, task_name: str, start_time: float) -> None:
+    total_time = datetime.now().timestamp() - start_time
+
+    success = [r for r in results if r["status"] == "success"]
+    failed = [r for r in results if r["status"] == "failed"]
+
+    logger.info(
+        LogSchema(
+            task_name=task_name,
+            timestamp=datetime.now().timestamp(),
+            total_time=total_time,
+            level="INFO",
+            message="Media processing finished",
+            details={
+                "success_count": len(success),
+                "failed_count": len(failed),
+            }
+        ).model_dump(mode="json")
+    )
+
+
+# Process each video separately
+@celery_app.task()
 def process_video(
     task_name: str,
     video_urls: list[str],
     audio_url: str,
-    text_to_speech: TestToSpeechDict,
+    text_to_speech: TextToSpeechDict,
     index: int,
 ) -> None:
     logger.info(
@@ -48,8 +124,10 @@ def process_video(
             error_details=None,
         ).model_dump(mode="json")
     )
-    start_time = time.time()
+    start_time = datetime.now().timestamp()
     try:
+        # Use a temporary directory to store downloaded media and intermediate files
+        # to delete them automatically after processing
         with tempfile.TemporaryDirectory() as tmpdir:
             video_filename = f"output_{index}.mp4"
             video_filepath = os.path.join(tmpdir, video_filename)
@@ -88,12 +166,13 @@ def process_video(
                 file_path=video_filepath,
                 file_name=video_filename,
             )
+    # Catch all exceptions to log them properly
     except Exception as e:
         logger.error(
             LogSchema(
                 task_name=task_name,
                 timestamp=datetime.now().timestamp(),
-                total_time=time.time() - start_time,
+                total_time=datetime.now().timestamp() - start_time,
                 level="ERROR",
                 message=f"Processing video failed",
                 details={
@@ -102,13 +181,18 @@ def process_video(
                 error_details=str(e),
             ).model_dump(mode="json")
         )
-        return
+        return {
+            "status": "failed",
+            "index": index,
+            "error": str(e),
+        }
+    # If everything went fine log success
     else:
         logger.info(
             LogSchema(
                 task_name=task_name,
                 timestamp=datetime.now().timestamp(),
-                total_time=time.time() - start_time,
+                total_time=datetime.now().timestamp() - start_time,
                 level="INFO",
                 message=f"Processing video finished successfully",
                 details={
@@ -117,14 +201,19 @@ def process_video(
                 error_details=None,
             ).model_dump(mode="json")
         )
+        return {
+            "status": "success",
+            "index": index,
+            "error": None,
+        }
 
 def create_voiceover(
     task_name: str,
     index: int,
     tmpdir: str,
-    text_to_speech: TestToSpeechDict,
+    text_to_speech: TextToSpeechDict,
 ) -> str:
-    start_time = time.time()
+    start_time = datetime.now().timestamp()
     voiceover_filename = os.path.join(
         tmpdir, 
         f"{text_to_speech['voice']}_{abs(hash(text_to_speech['text'])) % (10 ** 16)}.mp3",
@@ -138,7 +227,7 @@ def create_voiceover(
         LogSchema(
             task_name=task_name,
             timestamp=datetime.now().timestamp(),
-            total_time=time.time() - start_time,
+            total_time=datetime.now().timestamp() - start_time,
             level="INFO",
             message=f"Voiceover created",
             details={
@@ -148,6 +237,15 @@ def create_voiceover(
     )
     return voiceover_filename
 
+def _download_file(url: str, target_dir: str) -> str:
+    filename = os.path.join(target_dir, url.split("/")[-1])
+    with requests.get(url, stream=True, timeout=60) as r:
+        r.raise_for_status()
+        with open(filename, "wb") as f:
+            for chunk in r.iter_content(1024 * 1024):
+                f.write(chunk)
+    return filename
+
 def download_media(
     task_name: str,
     index: int,
@@ -155,28 +253,46 @@ def download_media(
     tmpdir: str,
     audio_url: str,
 ) -> tuple[list[str], str]:
-    start_time = time.time()
+    start_time = datetime.now().timestamp()
+    urls = video_urls + [audio_url]
     video_files = []
-    for video_url in video_urls:
-        filename = os.path.join(tmpdir, video_url.split("/")[-1])
-        with requests.get(video_url, stream=True) as r:
-            r.raise_for_status()
-            with open(filename, "wb") as f:
-                for chunk in r.iter_content(1024 * 1024):
-                    f.write(chunk)
-        video_files.append(filename)
+    background_filename = None
 
-    background_filename = os.path.join(tmpdir, audio_url.split("/")[-1])
-    with requests.get(audio_url, stream=True) as r:
-        r.raise_for_status()
-        with open(background_filename, "wb") as f:
-            for chunk in r.iter_content(1024 * 1024):
-                f.write(chunk)
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        future_map = {
+            executor.submit(_download_file, url, tmpdir): url
+            for url in urls
+        }
+
+        for future in as_completed(future_map):
+            url = future_map[future]
+            filename = future.result()
+            if url == audio_url:
+                background_filename = filename
+            else:
+                video_files.append(filename)
+        
+    # video_files = []
+    # for video_url in video_urls:
+    #     filename = os.path.join(tmpdir, video_url.split("/")[-1])
+    #     with requests.get(video_url, stream=True) as r:
+    #         r.raise_for_status()
+    #         with open(filename, "wb") as f:
+    #             for chunk in r.iter_content(1024 * 1024):
+    #                 f.write(chunk)
+    #     video_files.append(filename)
+
+    # background_filename = os.path.join(tmpdir, audio_url.split("/")[-1])
+    # with requests.get(audio_url, stream=True) as r:
+    #     r.raise_for_status()
+    #     with open(background_filename, "wb") as f:
+    #         for chunk in r.iter_content(1024 * 1024):
+    #             f.write(chunk)
     logger.info(
         LogSchema(
             task_name=task_name,
             timestamp=datetime.now().timestamp(),
-            total_time=time.time() - start_time,
+            total_time=datetime.now().timestamp() - start_time,
             level="INFO",
             message=f"Media for video downloaded",
             details={
@@ -223,17 +339,18 @@ def save_video(
     video: VideoClip,
     video_filepath: str
 ) -> None:
-    start_time = time.time()
+    start_time = datetime.now().timestamp()
     video.write_videofile(
         video_filepath,
         codec="libx264",
-        audio_codec="aac"
+        audio_codec="aac",
+        logger=None,
     )
     logger.info(
         LogSchema(
             task_name=task_name,
             timestamp=datetime.now().timestamp(),
-            total_time=time.time() - start_time,
+            total_time=datetime.now().timestamp() - start_time,
             level="INFO",
             message=f"Video saved locally",
             details={
@@ -249,7 +366,7 @@ def save_to_google_drive(
     file_path: str, 
     file_name: str
 ) -> None:
-    start_time = time.time()
+    start_time = datetime.now().timestamp()
     google_service.upload_video(
         folder_name=folder_name,
         file_path=file_path,
@@ -259,7 +376,7 @@ def save_to_google_drive(
         LogSchema(
             task_name=task_name,
             timestamp=datetime.now().timestamp(),
-            total_time=time.time() - start_time,
+            total_time=datetime.now().timestamp() - start_time,
             level="INFO",
             message=f"Video uploaded to Google Drive",
             details={

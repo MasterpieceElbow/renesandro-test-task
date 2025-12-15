@@ -11,6 +11,7 @@ This project implements a **REST API service** for generating media combinations
 - **POST `/process_media`** endpoint:
   - Accepts JSON payload with video blocks, audio blocks, and text-to-speech instructions
   - Queues tasks asynchronously; does not block new requests while processing
+  - Logs the execution time of each process, at the end logs the total time and the number of successful/unsuccessful executions of all processes
 - Generates **all possible combinations of videos** across blocks
 - Randomly applies:
   - Background audio (looped and volume normalized)
@@ -71,7 +72,7 @@ Behavior:
 
 - Randomly adds background audio and TTS overlay
 
-- Create asynchronous Celery task for each video combination and execute them across all Celery workers
+- Create Celery task for each video combination and execute them across all Celery workers
 
 - Saves results in task_name/ folder in Google Drive
 

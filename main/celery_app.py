@@ -2,8 +2,6 @@
 from celery import Celery
 
 from main.settings import settings
-from tasks import tasks # Ensure tasks are registered
-
 
 celery_app = Celery(
     "worker",
@@ -15,4 +13,3 @@ celery_app.conf.update(
     task_track_started=True,
     result_expires=3600,
 )
-celery_app.autodiscover_tasks()

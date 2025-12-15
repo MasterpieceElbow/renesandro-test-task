@@ -13,4 +13,3 @@ async def process_media(
     media_data: ProcessMediaSchema,
 ):
     await media_service.process_media(media_data=media_data)
-    return

@@ -1,4 +1,5 @@
 import io
+import json
 import os
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
@@ -14,6 +15,7 @@ class GoogleDriveService:
         self.scopes = ['https://www.googleapis.com/auth/drive']
         self.service_account_file = settings.google_application_credentials
         self.root_folder_id = settings.google_drive_root_folder_id
+        self.google_client_email = settings.google_client_email
         self.creds = self._authenticate()
 
     def _authenticate(self):
@@ -29,9 +31,11 @@ class GoogleDriveService:
                     self.service_account_file, self.scopes
                 )
                 creds = flow.run_local_server(port=0)
+            token_data = json.loads(creds.to_json())
+            token_data["client_email"] = self.google_client_email
             
             with open('google_auth_token.json', 'w') as token:
-                token.write(creds.to_json())
+                json.dump(token_data, token, ensure_ascii=False, indent=2)
             creds = service_account.Credentials.from_service_account_file(
                 self.service_account_file, scopes=self.scopes
             )
