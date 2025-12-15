@@ -118,6 +118,8 @@ Docker-compose orchestration – configured multi-container architecture for API
 - Add retry mechanism for failed TTS or media processing
 - Expose task status endpoint for progress tracking
 - Add more metrics to monitor queue performance and worker utilization
+- Сurrently this only works for videos of the same format and resolution. Add processing of different formats: .mp4 + .mov and resolutions
+- Consider another tools for video processing. Probably, plain FFmpeg may give better performance.
 
 ## Author
 
