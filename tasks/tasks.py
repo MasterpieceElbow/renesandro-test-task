@@ -328,6 +328,8 @@ def save_video(
         video_filepath,
         codec="libx264",
         audio_codec="aac",
+        threads=1,
+        preset="ultrafast",
         logger=None,
     )
     logger.info(

@@ -3,7 +3,7 @@ set -e
 
 if [ "$SERVICE" = "web" ]; then
   echo "Starting FastAPI..."
-  exec uvicorn main.app:app \
+  exec uvicorn app:app \
     --host 0.0.0.0 \
     --port 8000
 

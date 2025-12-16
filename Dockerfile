@@ -18,4 +18,4 @@ COPY . .
 
 RUN chmod +x entrypoint.sh
 
-ENTRYPOINT ["sh", "./entrypoint.sh"]
+CMD ["python3.11", "app.py"]

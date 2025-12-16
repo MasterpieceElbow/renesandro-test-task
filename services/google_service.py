@@ -1,11 +1,7 @@
-import io
-import json
-import os
 from googleapiclient.discovery import build
-from google.auth.transport.requests import Request
-from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.http import MediaFileUpload
+
 
 from main.settings import settings
 
@@ -13,34 +9,10 @@ from main.settings import settings
 class GoogleDriveService:
     def __init__(self):
         self.scopes = ['https://www.googleapis.com/auth/drive']
-        self.service_account_file = settings.google_application_credentials
+        self.service_credentials: dict = settings.google_application_credentials
         self.root_folder_id = settings.google_drive_root_folder_id
-        self.google_client_email = settings.google_client_email
-        self.creds = self._authenticate()
+        self.creds = Credentials.from_authorized_user_info(self.service_credentials, self.scopes)
 
-    def _authenticate(self):
-        creds = None
-        if os.path.exists('google_auth_token.json'):
-            creds = Credentials.from_authorized_user_file('google_auth_token.json', self.scopes)
-
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    self.service_account_file, self.scopes
-                )
-                creds = flow.run_local_server(port=0)
-            token_data = json.loads(creds.to_json())
-            token_data["client_email"] = self.google_client_email
-            
-            with open('google_auth_token.json', 'w') as token:
-                json.dump(token_data, token, ensure_ascii=False, indent=2)
-            creds = service_account.Credentials.from_service_account_file(
-                self.service_account_file, scopes=self.scopes
-            )
-        return creds
-    
     def upload_video(
         self, 
         folder_name: str,
@@ -56,9 +28,10 @@ class GoogleDriveService:
             'name': file_name,
             'parents': [subfolder_id]
         }
+        media = MediaFileUpload(file_path, resumable=True)
         service.files().create(
             body=file_metadata,
-            media_body=file_path,
+            media_body=media,
         ).execute()
 
     def get_or_create_subfolder(
