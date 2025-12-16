@@ -98,11 +98,9 @@ ElevenLabs API (text-to-speech)
 
 ElevenLabs TTS API – integrated programmatically for dynamic voice overlays
 
-Moviepy Python integration – automated complex video/audio processing pipelines
+Moviepy Python integration – work with audio of the video
 
-Async Task Queues (Celery) – learned best practices for queueing and monitoring long-running tasks
-
-Docker-compose orchestration – configured multi-container architecture for API + queue + dependencies
+Celery Chord – callback task when all tasks are done
 
 ## Bottlenecks
 
