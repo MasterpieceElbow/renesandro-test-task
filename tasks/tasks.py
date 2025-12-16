@@ -166,7 +166,7 @@ def process_video(
                 file_path=video_filepath,
                 file_name=video_filename,
             )
-    # Catch all exceptions to log them properly
+    # Catch all unexpected exceptions and log them
     except Exception as e:
         logger.error(
             LogSchema(
@@ -218,11 +218,17 @@ def create_voiceover(
         tmpdir, 
         f"{text_to_speech['voice']}_{abs(hash(text_to_speech['text'])) % (10 ** 16)}.mp3",
     )
-    elevenlabs_service.create_voiceover(
-        filename=voiceover_filename,
-        text=text_to_speech["text"],
-        author=text_to_speech["voice"],
-    )
+    try:
+        elevenlabs_service.create_voiceover(
+            filename=voiceover_filename,
+            text=text_to_speech["text"],
+            author=text_to_speech["voice"],
+        )
+    # For future: catch specific exceptions from the ElevenLabsService
+    # for ex: Timeout, UnsufficientCredits, etc.
+    except Exception as e:
+        raise e.__class__(f"Voiceover creation failed: {str(e)}")
+    
     logger.info(
         LogSchema(
             task_name=task_name,
@@ -324,14 +330,19 @@ def save_video(
     video_filepath: str
 ) -> None:
     start_time = datetime.now().timestamp()
-    video.write_videofile(
-        video_filepath,
-        codec="libx264",
-        audio_codec="aac",
-        threads=1,
-        preset="ultrafast",
-        logger=None,
-    )
+    try:
+        video.write_videofile(
+            video_filepath,
+            codec="libx264",
+            audio_codec="aac",
+            threads=1,
+            preset="ultrafast",
+            logger=None,
+        )
+    # For future: catch specific exceptions from moviepy
+    except Exception as e:
+        raise e.__class__(f"Saving video failed: {str(e)}")
+    
     logger.info(
         LogSchema(
             task_name=task_name,
@@ -353,11 +364,17 @@ def save_to_google_drive(
     file_name: str
 ) -> None:
     start_time = datetime.now().timestamp()
-    google_service.upload_video(
-        folder_name=folder_name,
-        file_path=file_path,
-        file_name=file_name,
-    )
+    try:
+        google_service.upload_video(
+            folder_name=folder_name,
+            file_path=file_path,
+            file_name=file_name,
+        )
+    # For future: catch specific exceptions from GoogleDriveService
+    # for ex: AuthenticationError, UploadError, Timeout etc.
+    except Exception as e:
+        raise e.__class__(f"Uploading to Google Drive failed: {str(e)}")
+
     logger.info(
         LogSchema(
             task_name=task_name,
