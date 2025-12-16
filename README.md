@@ -115,9 +115,12 @@ Celery Chord – callback task when all tasks are done
 - Add retry mechanism for failed TTS or media processing
 - Expose task status endpoint for progress tracking
 - Add more metrics to monitor queue performance and worker utilization
-- Сurrently this only works for videos of the same format and resolution. Add processing of different formats: .mp4 + .mov and resolutions
+- Сurrently this only works for videos of the same format and resolution. Add processing of different formats: .mp4 + .mov and different resolutions
 - Consider another tools for video processing. Probably, plain FFmpeg may give better performance.
 - On a low performance VPS it may drop frames. Need to add correct processing considering the lightweight servers
+- Add tests
+- Consider using taskiq instead of Celery, as taskiq is asynchronous
+- Spin up LGTM container and send metrics there and visualize
 
 ## Author
 
