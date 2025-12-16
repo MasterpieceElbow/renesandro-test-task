@@ -94,8 +94,6 @@ Google Drive API
 
 ElevenLabs API (text-to-speech)
 
-Logging & metrics (structured logging)
-
 ## Lessons Learned / New Tools
 
 ElevenLabs TTS API – integrated programmatically for dynamic voice overlays
@@ -121,6 +119,7 @@ Docker-compose orchestration – configured multi-container architecture for API
 - Add more metrics to monitor queue performance and worker utilization
 - Сurrently this only works for videos of the same format and resolution. Add processing of different formats: .mp4 + .mov and resolutions
 - Consider another tools for video processing. Probably, plain FFmpeg may give better performance.
+- On a low performance VPS it may drop frames. Need to add correct processing considering the lightweight servers
 
 ## Author
 
